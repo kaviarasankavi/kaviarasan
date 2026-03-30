@@ -7,7 +7,7 @@
 #   2. Installs Node.js dependencies
 #   3. Runs automated tests
 #   4. Builds the React production bundle
-#   5. Deploys to Azure App Service
+#   5. Deploys to Azure App Service via Kudu Zip Deploy
 # ============================================================
 
 name: 'APEX CI/CD Pipeline'
@@ -58,7 +58,7 @@ jobs:
 
   # ========================================
   # JOB 2: CONTINUOUS DEPLOYMENT (CD)
-  # Deploy to Azure App Service
+  # Deploy to Azure App Service via Kudu API
   # ========================================
   deploy:
     name: '🚀 Deploy to Azure'
@@ -72,12 +72,24 @@ jobs:
           name: build-artifact
           path: build/
 
-      - name: '🌐 Deploy to Azure App Service'
-        uses: azure/webapps-deploy@v3
-        with:
-          app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          package: build/
+      - name: '📦 Create Deployment Package'
+        run: |
+          cd build
+          zip -r ../deploy.zip .
+          cd ..
+          echo "📦 Package size: $(du -h deploy.zip | cut -f1)"
+
+      - name: '🌐 Deploy to Azure App Service (Kudu Zip Deploy)'
+        run: |
+          echo "🚀 Deploying to Azure App Service..."
+          curl -X POST \
+            -u "${{ secrets.DEPLOY_USERNAME }}:${{ secrets.DEPLOY_PASSWORD }}" \
+            --data-binary @deploy.zip \
+            "https://${{ env.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net/api/zipdeploy" \
+            --fail \
+            -v
+          echo ""
+          echo "✅ Deployment complete!"
 
       - name: '✅ Deployment Summary'
         run: |
@@ -85,3 +97,4 @@ jobs:
           echo "- **App**: ${{ env.AZURE_WEBAPP_NAME }}" >> $GITHUB_STEP_SUMMARY
           echo "- **URL**: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Method**: Kudu Zip Deploy API" >> $GITHUB_STEP_SUMMARY
