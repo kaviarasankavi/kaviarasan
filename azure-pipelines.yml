@@ -7,7 +7,7 @@
 #   2. Installs Node.js dependencies
 #   3. Runs automated tests
 #   4. Builds the React production bundle
-#   5. Deploys to Azure App Service
+#   5. Deploys to Azure App Service via Kudu Zip Deploy
 # ============================================================
 
 trigger:
@@ -19,7 +19,6 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  azureSubscription: 'azure-apex-connection'
   webAppName: 'kaviarasan-portfolio-apex'
   nodeVersion: '20.x'
 
@@ -76,26 +75,30 @@ stages:
 
   # ========================================
   # STAGE 2: CONTINUOUS DEPLOYMENT (CD)
-  # Deploy to Azure App Service
+  # Deploy to Azure App Service via Kudu API
   # ========================================
   - stage: Deploy
     displayName: '🚀 Deploy to Azure'
     dependsOn: Build
     condition: succeeded()
     jobs:
-      - deployment: DeployJob
+      - job: DeployJob
         displayName: 'Deploy to Azure App Service'
-        environment: 'production'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                # Deploy the build artifact to Azure App Service
-                - task: AzureWebApp@1
-                  inputs:
-                    azureSubscription: '$(azureSubscription)'
-                    appType: 'webAppLinux'
-                    appName: '$(webAppName)'
-                    package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
-                    runtimeStack: 'NODE|20-lts'
-                  displayName: '🌐 Deploy to Azure App Service'
+        steps:
+          - download: current
+            artifact: drop
+            displayName: '📥 Download Build Artifact'
+
+          # Deploy using Kudu Zip Deploy API (no service connection needed)
+          - script: |
+              echo "🚀 Deploying to Azure App Service..."
+              curl -X POST \
+                -u "$(DEPLOY_USERNAME):$(DEPLOY_PASSWORD)" \
+                --data-binary @"$(Pipeline.Workspace)/drop/$(Build.BuildId).zip" \
+                "https://$(webAppName).scm.azurewebsites.net/api/zipdeploy" \
+                --fail \
+                -v
+              echo ""
+              echo "✅ Deployment complete!"
+              echo "🌐 Live at: https://$(webAppName).azurewebsites.net"
+            displayName: '🌐 Deploy to Azure App Service'
