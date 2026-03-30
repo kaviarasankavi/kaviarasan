@@ -1,0 +1,98 @@
+# ============================================================
+# APEX — Automated Pipeline for Elastic eXecution
+# CI/CD Pipeline for Portfolio Website (GitHub Actions)
+# ============================================================
+# This pipeline automatically:
+#   1. Triggers on every push to the 'main' branch
+#   2. Installs Node.js dependencies
+#   3. Runs automated tests
+#   4. Builds the React production bundle
+#   5. Deploys to Azure App Service via Kudu Zip Deploy
+# ============================================================
+
+name: 'APEX CI/CD Pipeline'
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # ========================================
+  # JOB 1: CONTINUOUS INTEGRATION (CI)
+  # Build & Test the React Application
+  # ========================================
+  build:
+    name: '🔨 Build & Test'
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: '📥 Checkout Code'
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Node.js
+      - name: '📦 Setup Node.js 20.x'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+
+      # Step 3: Install dependencies
+      - name: '📥 Install Dependencies'
+        run: npm ci
+
+      # Step 4: Run tests
+      - name: '🧪 Run Tests'
+        run: npm test -- --ci --watchAll=false --passWithNoTests
+        continue-on-error: true
+
+      # Step 5: Build production bundle
+      - name: '🏗️ Build Production Bundle'
+        run: npm run build
+
+      # Step 6: Upload build artifact
+      - name: '📤 Upload Artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifact
+          path: build/
+
+  # ========================================
+  # JOB 2: CONTINUOUS DEPLOYMENT (CD)
+  # Deploy to Azure App Service
+  # ========================================
+  deploy:
+    name: '🚀 Deploy to Azure'
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      # Step 1: Download build artifact
+      - name: '📥 Download Artifact'
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifact
+          path: build/
+
+      # Step 2: Zip the build for deployment
+      - name: '📦 Create Deployment Package'
+        run: |
+          cd build
+          zip -r ../deploy.zip .
+          cd ..
+
+      # Step 3: Deploy to Azure App Service via Kudu Zip Deploy
+      - name: '🌐 Deploy to Azure App Service'
+        run: |
+          echo "🚀 Deploying to Azure App Service..."
+          curl -X POST \
+            -u "${{ secrets.DEPLOY_USERNAME }}:${{ secrets.DEPLOY_PASSWORD }}" \
+            --data-binary @deploy.zip \
+            "https://kaviarasan-portfolio-apex.scm.azurewebsites.net/api/zipdeploy" \
+            --fail \
+            --silent \
+            --show-error
+          echo ""
+          echo "✅ Deployment complete!"
+          echo "🌐 Live at: https://kaviarasan-portfolio-apex.azurewebsites.net"
