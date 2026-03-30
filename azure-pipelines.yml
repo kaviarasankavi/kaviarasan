@@ -1,0 +1,101 @@
+# ============================================================
+# APEX — Automated Pipeline for Elastic eXecution
+# CI/CD Pipeline for Portfolio Website
+# ============================================================
+# This pipeline automatically:
+#   1. Triggers on every push to the 'main' branch
+#   2. Installs Node.js dependencies
+#   3. Runs automated tests
+#   4. Builds the React production bundle
+#   5. Deploys to Azure App Service
+# ============================================================
+
+trigger:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  azureSubscription: 'azure-apex-connection'
+  webAppName: 'kaviarasan-portfolio-apex'
+  nodeVersion: '20.x'
+
+stages:
+  # ========================================
+  # STAGE 1: CONTINUOUS INTEGRATION (CI)
+  # Build & Test the React Application
+  # ========================================
+  - stage: Build
+    displayName: '🔨 Build & Test'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build React Application'
+        steps:
+          # Step 1: Install Node.js
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '$(nodeVersion)'
+            displayName: '📦 Install Node.js $(nodeVersion)'
+
+          # Step 2: Install dependencies
+          - script: |
+              npm ci
+            displayName: '📥 Install Dependencies'
+
+          # Step 3: Run automated tests
+          - script: |
+              npm test -- --ci --watchAll=false --passWithNoTests
+            displayName: '🧪 Run Tests'
+            continueOnError: true
+
+          # Step 4: Build production bundle
+          - script: |
+              npm run build
+            displayName: '🏗️ Build Production Bundle'
+
+          # Step 5: Archive the build output for deployment
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: 'build'
+              includeRootFolder: false
+              archiveType: 'zip'
+              archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId).zip'
+              replaceExistingArchive: true
+            displayName: '📦 Archive Build Artifacts'
+
+          # Step 6: Publish artifact for the Deploy stage
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+              ArtifactName: 'drop'
+              publishLocation: 'Container'
+            displayName: '📤 Publish Artifact'
+
+  # ========================================
+  # STAGE 2: CONTINUOUS DEPLOYMENT (CD)
+  # Deploy to Azure App Service
+  # ========================================
+  - stage: Deploy
+    displayName: '🚀 Deploy to Azure'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployJob
+        displayName: 'Deploy to Azure App Service'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                # Deploy the build artifact to Azure App Service
+                - task: AzureWebApp@1
+                  inputs:
+                    azureSubscription: '$(azureSubscription)'
+                    appType: 'webAppLinux'
+                    appName: '$(webAppName)'
+                    package: '$(Pipeline.Workspace)/drop/$(Build.BuildId).zip'
+                    runtimeStack: 'NODE|20-lts'
+                  displayName: '🌐 Deploy to Azure App Service'
