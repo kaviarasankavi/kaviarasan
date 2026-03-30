@@ -17,6 +17,10 @@ on:
     branches:
       - main
 
+env:
+  AZURE_WEBAPP_NAME: kaviarasan-portfolio-apex
+  NODE_VERSION: '20.x'
+
 jobs:
   # ========================================
   # JOB 1: CONTINUOUS INTEGRATION (CI)
@@ -27,31 +31,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
       - name: '📥 Checkout Code'
         uses: actions/checkout@v4
 
-      # Step 2: Set up Node.js
-      - name: '📦 Setup Node.js 20.x'
+      - name: '📦 Setup Node.js'
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      # Step 3: Install dependencies
       - name: '📥 Install Dependencies'
         run: npm ci
 
-      # Step 4: Run tests
       - name: '🧪 Run Tests'
         run: npm test -- --ci --watchAll=false --passWithNoTests
         continue-on-error: true
 
-      # Step 5: Build production bundle
       - name: '🏗️ Build Production Bundle'
         run: npm run build
 
-      # Step 6: Upload build artifact
       - name: '📤 Upload Artifact'
         uses: actions/upload-artifact@v4
         with:
@@ -68,17 +66,22 @@ jobs:
     needs: build
 
     steps:
-      # Step 1: Download build artifact
       - name: '📥 Download Artifact'
         uses: actions/download-artifact@v4
         with:
           name: build-artifact
           path: build/
 
-      # Step 2: Deploy to Azure Web App using Publish Profile
       - name: '🌐 Deploy to Azure App Service'
         uses: azure/webapps-deploy@v2
         with:
-          app-name: 'kaviarasan-portfolio-apex'
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
           package: build/
+
+      - name: '✅ Deployment Summary'
+        run: |
+          echo "## 🚀 Deployment Successful!" >> $GITHUB_STEP_SUMMARY
+          echo "- **App**: ${{ env.AZURE_WEBAPP_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
