@@ -7,7 +7,7 @@
 #   2. Installs Node.js dependencies
 #   3. Runs automated tests
 #   4. Builds the React production bundle
-#   5. Deploys to Azure App Service via Kudu Zip Deploy
+#   5. Deploys to Azure App Service
 # ============================================================
 
 name: 'APEX CI/CD Pipeline'
@@ -75,24 +75,10 @@ jobs:
           name: build-artifact
           path: build/
 
-      # Step 2: Zip the build for deployment
-      - name: '📦 Create Deployment Package'
-        run: |
-          cd build
-          zip -r ../deploy.zip .
-          cd ..
-
-      # Step 3: Deploy to Azure App Service via Kudu Zip Deploy
+      # Step 2: Deploy to Azure Web App using Publish Profile
       - name: '🌐 Deploy to Azure App Service'
-        run: |
-          echo "🚀 Deploying to Azure App Service..."
-          curl -X POST \
-            -u "${{ secrets.DEPLOY_USERNAME }}:${{ secrets.DEPLOY_PASSWORD }}" \
-            --data-binary @deploy.zip \
-            "https://kaviarasan-portfolio-apex.scm.azurewebsites.net/api/zipdeploy" \
-            --fail \
-            --silent \
-            --show-error
-          echo ""
-          echo "✅ Deployment complete!"
-          echo "🌐 Live at: https://kaviarasan-portfolio-apex.azurewebsites.net"
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'kaviarasan-portfolio-apex'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: build/
