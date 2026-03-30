@@ -80,15 +80,20 @@ jobs:
           echo "📦 Package size: $(du -h deploy.zip | cut -f1)"
 
       - name: '🌐 Deploy to Azure App Service (Kudu Zip Deploy)'
+        env:
+          DEPLOY_CREDS: ${{ secrets.DEPLOY_CREDENTIALS }}
         run: |
           echo "🚀 Deploying to Azure App Service..."
           curl -X POST \
-            -u "${{ secrets.DEPLOY_USERNAME }}:${{ secrets.DEPLOY_PASSWORD }}" \
+            -H "Authorization: Basic ${DEPLOY_CREDS}" \
+            -H "Content-Type: application/octet-stream" \
             --data-binary @deploy.zip \
             "https://${{ env.AZURE_WEBAPP_NAME }}.scm.azurewebsites.net/api/zipdeploy" \
             --fail \
-            -v
-          echo ""
+            --silent \
+            --show-error \
+            -o /dev/null \
+            -w "HTTP Status: %{http_code}\n"
           echo "✅ Deployment complete!"
 
       - name: '✅ Deployment Summary'
